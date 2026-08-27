@@ -1,0 +1,23 @@
+# Swift build artifacts
+.build/
+*.app
+
+# legacy compiled transcriber binary (now built into VMIngestCore)
+transcribe
+
+# runtime output / state (machine-specific, may contain personal data)
+*.jsonl
+seen.json
+status.json
+config.json
+*.state
+*.cursor
+
+# temp copies of Apple's database
+CloudRecordings.db*
+
+# local session scratch (never publish — may quote real memo ids/text)
+SCRATCH.md
+
+# macOS cruft
+.DS_Store
