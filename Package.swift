@@ -46,6 +46,24 @@ let package = Package(
             name: "vmingest",
             dependencies: ["VMIngestCore"]
         ),
+        // The Claude Code channel bridge: a library (so it can be tested — an
+        // executable target can't be imported) that turns new memos into
+        // `claude/channel` messages. Read-only over VMIngestCore; talks MCP to
+        // the resident app's loopback server to learn about new memos.
+        .target(
+            name: "VMIngestChannel",
+            dependencies: [
+                "VMIngestCore",
+                .product(name: "MCP", package: "swift-sdk")
+            ]
+        ),
+        .executableTarget(
+            name: "vmchannel",
+            dependencies: [
+                "VMIngestCore",
+                "VMIngestChannel"
+            ]
+        ),
         .testTarget(
             name: "VMIngestCoreTests",
             dependencies: ["VMIngestCore"]
@@ -53,6 +71,10 @@ let package = Package(
         .testTarget(
             name: "VMIngestMCPTests",
             dependencies: ["VMIngestMCP", "VMIngestCore"]
+        ),
+        .testTarget(
+            name: "VMIngestChannelTests",
+            dependencies: ["VMIngestChannel", "VMIngestCore"]
         ),
     ]
 )

@@ -170,7 +170,7 @@ re-emits. Keep this separate from any **consumer** cursor.
 
 ### Targets
 
-One Swift Package, four targets plus two script directories:
+One Swift Package, six targets plus script/plugin directories:
 
 - **`VMIngestCore`** — everything with logic in it and no UI: `RecordingsReader`
   (DB), `TsrpExtractor`, `Transcriber`, `TranscriptPolicy`, `ProducerState`,
@@ -186,8 +186,18 @@ One Swift Package, four targets plus two script directories:
   notifications, keeps `status.json` current, hosts the MCP server. Executable,
   therefore un-importable and effectively untestable: keep it thin.
 - **`vmingest`** — CLI for headless runs and inspection.
+- **`VMIngestChannel`** — the Claude Code *channel* bridge: `ChannelProtocol`
+  (the hand-rolled `claude/channel` JSON-RPC, pure/testable), `MemoSource`
+  (default: an MCP client over `wait_for_next`), `ChannelServer` (stdio
+  plumbing). A library so it can be tested; read-only over VMIngestCore. See
+  the channel section below.
+- **`vmchannel`** — thin executable wrapping VMIngestChannel; what the channel
+  plugin launches.
 - **`packaging/`, `launchd/`** — build+sign the `.app`, install the LaunchAgent.
 - **`router/`** — standalone Shortcuts-based Apple Note appender.
+- **`channel/`** — the Claude Code channel *plugin* (`.claude-plugin/plugin.json`,
+  `.mcp.json`, `run.sh`) that launches `vmchannel`; the repo root also carries a
+  `.claude-plugin/marketplace.json` so it installs as a local marketplace.
 
 The resident `VoiceMemosIngest` menu-bar app is the primary runtime: it watches
 the Recordings dir with an FSEvents stream (debounced ~2s), runs
@@ -358,6 +368,43 @@ Put new logic in the toolbox, keep the provider thin.
   Use the **absolute** npx path (Claude Desktop launches with a minimal PATH and
   won't find a mise/nvm shim). The server only validates `Origin`/`Host` when
   present, so a non-browser client with no `Origin` connects fine.
+
+### Channel plugin (push to agents) — `VMIngestChannel` / `vmchannel` / `channel/`
+
+A Claude Code **channel** lets a session *subscribe* to new memos and receive
+each as an inbound message, instead of every agent running its own `Monitor` /
+cron / `wait_for_next` loop (the point of issue #1). A session opts in at launch:
+`claude --channels plugin:voice-memos@voice-memos-ingest`.
+
+`vmchannel` is a bridge: a **channel MCP server over stdio** on the Claude Code
+side, and an **MCP client** to the resident app's loopback server on the data
+side. On the data side it just loops `wait_for_next`, so it reuses the existing
+push edge — no second watcher, no new poll — but it therefore needs the menu-bar
+app running with `mcpEnabled`.
+
+- **The channel JSON-RPC is hand-rolled (`ChannelProtocol`), not the swift-sdk
+  `Server`** — and this is forced, not a preference. A channel must advertise
+  `capabilities.experimental: {"claude/channel": {}}` in its initialize result,
+  but the swift-sdk `Server.Capabilities` is a fixed Codable with **no
+  `experimental` field**, so the SDK literally cannot emit it. The contract is
+  tiny (initialize, ping, tools/list, tools/call, and the outbound
+  `notifications/claude/channel`), so `ChannelProtocol` is a pure
+  request→response function plus a notification builder, built on `MCP.Value` —
+  and, unlike anything buried in a transport, directly unit-tested. Wire shapes
+  mirror the official reference channel (`fakechat`); if Claude Code's contract
+  changes, that's the thing to diff against.
+- **One-way feed.** Voice memos have no human on the other end, so the `reply`
+  tool exists only because the contract wants one — it logs to stderr and
+  discards. Don't wire it to anything.
+- **Layering mirrors VMIngestMCP's lesson:** logic in the importable
+  `VMIngestChannel` library, I/O-only shell in the `vmchannel` executable.
+  `ChannelServer.handle` / `pumpSource` take an injectable `OutboundWriter` so
+  they're testable without real stdin/stdout; `MemoSource` is a protocol so the
+  pump can run against a canned source.
+- The plugin launches `vmchannel` via `channel/run.sh` (finds the built binary;
+  it's a `.build/` artifact, not committed — `swift build -c release --product
+  vmchannel` first). Installable as a local marketplace via the repo-root
+  `.claude-plugin/marketplace.json`.
 
 **TCC gotchas worth remembering:**
 

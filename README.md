@@ -132,6 +132,30 @@ deliberately not enumerated — discover ids with the tools.
 > interface publishes your transcripts to that network. Leave it on loopback, or
 > set `"mcpEnabled": false`.
 
+## Channel plugin (push to agents)
+
+Instead of each agent polling (a `Monitor`, a cron, or a `wait_for_next` loop), a
+Claude Code session can **subscribe** to new memos and receive each one as a
+message, via a [channel](https://docs.claude.com/en/docs/claude-code/plugins).
+
+The `vmchannel` binary is a channel MCP server on the Claude Code side and an MCP
+client to the loopback server above on the data side — it reuses `wait_for_next`,
+so there's no new watcher, and it needs the menu-bar app running.
+
+```sh
+swift build -c release --product vmchannel          # build it (not committed)
+# then, in Claude Code:
+#   /plugin marketplace add /path/to/voice-memos-ingest
+#   /plugin install voice-memos@voice-memos-ingest
+claude --channels plugin:voice-memos@voice-memos-ingest   # launch subscribed
+```
+
+That session then receives each new memo as a `notifications/claude/channel`
+message (transcript as the content; title/time/duration/source in `meta`). It is
+a **one-way feed** — there's no human on the other end — so the contract's `reply`
+tool only logs and discards. Full setup and the one-time marketplace registration
+are in [`channel/README.md`](channel/README.md).
+
 ## CLI
 
 `vmingest` is for headless use, scripting, and debugging.
