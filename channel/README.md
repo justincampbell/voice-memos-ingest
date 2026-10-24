@@ -20,31 +20,47 @@ and it needs the menu-bar app running with `mcpEnabled` (the default).
 
 ## Setup (one time)
 
-1. **Build the binary** (it is a build artifact, not committed):
+1. **Build and install the binary** (it is a build artifact, not committed):
 
    ```sh
-   swift build -c release --product vmchannel
+   make install-channel        # → ~/.local/bin/vmchannel
    ```
 
-   `run.sh` finds `.build/release/vmchannel` (or `.build/debug`, or `$VMCHANNEL_BIN`,
-   or `vmchannel` on `PATH`).
+   It has to live somewhere stable: Claude Code runs an installed plugin from a
+   **copy** under `~/.claude/plugins/cache/`, so `run.sh` can't reach this repo's
+   `.build/`. It looks for `$VMCHANNEL_BIN`, then `~/.local/bin/vmchannel`, then
+   (only when run straight from a checkout) `.build/{release,debug}`, then `PATH`.
+   Re-run this after changing the Swift code.
 
 2. **Register this repo as a plugin marketplace** and install the plugin:
 
-   ```
-   /plugin marketplace add /path/to/voice-memos-ingest
-   /plugin install voice-memos@voice-memos-ingest
+   ```sh
+   claude plugin marketplace add /path/to/voice-memos-ingest
+   claude plugin install voice-memos@voice-memos-ingest
    ```
 
    (`voice-memos-ingest` is the marketplace name from the repo-root
-   `.claude-plugin/marketplace.json`; `voice-memos` is the plugin.)
+   `.claude-plugin/marketplace.json`; `voice-memos` is the plugin.) After
+   changing anything under `channel/`, bump `version` in `plugin.json` and run
+   `claude plugin update voice-memos@voice-memos-ingest` — the cached copy is
+   keyed on the version.
 
 3. **Launch a session subscribed to the channel.** The channel server only
-   connects when the session is started with the channel flag:
+   connects when the session is started with a channel flag — and it must be
+   the *development* one:
 
    ```sh
-   claude --channels plugin:voice-memos@voice-memos-ingest
+   claude --dangerously-load-development-channels plugin:voice-memos@voice-memos-ingest
    ```
+
+   During the channels research preview, plain `--channels` accepts only
+   Anthropic's allowlist (the channel plugins in `claude-plugins-official`); a
+   local plugin passed to it starts nothing and shows *"not on the approved
+   channels allowlist"*. There is no user setting to add to that list (the
+   `allowedChannelPlugins` key is managed-settings-only, for Team/Enterprise
+   admins). The development flag skips the allowlist for the entries passed to
+   it, shows a one-time warning to accept, and only works in an **interactive**
+   session — it's ignored under `-p`.
 
 That session now receives each new memo as a message like:
 
@@ -55,7 +71,9 @@ Idea: let agents subscribe to new memos via channels instead of polling.
 ```
 
 The transcript is the message content; the memo's `title`, `ts` (recorded time),
-`duration`, and `source` ride in the notification `meta`.
+`duration`, and `transcript_source` (`apple` | `speechtranscriber`) ride in the
+notification `meta`. (Not `source`: the envelope already has a `source`
+attribute naming the channel.)
 
 ## One-way feed
 

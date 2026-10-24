@@ -1,7 +1,7 @@
 // vmchannel — the Claude Code channel-plugin server for voice-memos-ingest.
 //
 // Launched by Claude Code (via channel/.mcp.json) when a session starts with
-//   claude --channels plugin:voice-memos@<marketplace>
+//   claude --dangerously-load-development-channels plugin:voice-memos@<marketplace>
 // It speaks the `claude/channel` contract over stdio and pushes each newly
 // ingested voice memo into the session as a message — no polling, no Monitor,
 // no cron on the agent's side. New memos are learned from the resident app's

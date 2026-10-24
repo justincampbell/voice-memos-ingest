@@ -143,15 +143,18 @@ client to the loopback server above on the data side — it reuses `wait_for_nex
 so there's no new watcher, and it needs the menu-bar app running.
 
 ```sh
-swift build -c release --product vmchannel          # build it (not committed)
-# then, in Claude Code:
-#   /plugin marketplace add /path/to/voice-memos-ingest
-#   /plugin install voice-memos@voice-memos-ingest
-claude --channels plugin:voice-memos@voice-memos-ingest   # launch subscribed
+make install-channel                                  # build → ~/.local/bin/vmchannel
+claude plugin marketplace add /path/to/voice-memos-ingest
+claude plugin install voice-memos@voice-memos-ingest
+claude --dangerously-load-development-channels plugin:voice-memos@voice-memos-ingest
 ```
 
+Plain `--channels` won't work for this plugin: during the research preview it
+only accepts Anthropic's allowlist, so a local channel needs the development
+flag (interactive sessions only).
+
 That session then receives each new memo as a `notifications/claude/channel`
-message (transcript as the content; title/time/duration/source in `meta`). It is
+message (transcript as the content; title/time/duration in `meta`). It is
 a **one-way feed** — there's no human on the other end — so the contract's `reply`
 tool only logs and discards. Full setup and the one-time marketplace registration
 are in [`channel/README.md`](channel/README.md).

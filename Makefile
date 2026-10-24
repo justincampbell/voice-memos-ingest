@@ -31,13 +31,13 @@ SHELL_SCRIPTS := $(shell git ls-files '*.sh' ':!:.build/**' 2>/dev/null)
 # set flags that; SC2250 does, by insisting on `$${APP}` everywhere.
 SHELLCHECK_FLAGS := --enable=require-variable-braces
 
-.PHONY: help build test lint check package install uninstall clean
+.PHONY: help build test lint check package install install-channel uninstall clean
 
 help: ## Show this help
 	@echo "voice-memos-ingest — available targets:"
 	@echo
 	@awk 'BEGIN { FS = ":.*## " } \
-	     /^[a-zA-Z0-9_-]+:.*## / { printf "  %-10s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	     /^[a-zA-Z0-9_-]+:.*## / { printf "  %-16s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo
 
 build: ## Build VMIngestCore, the menu-bar app, and the CLI (debug)
@@ -69,6 +69,15 @@ package: ## Build release + code-sign .build/VoiceMemosIngest.app
 
 install: ## Package, install to ~/Applications, load the LaunchAgent
 	launchd/install.sh
+
+# The channel plugin runs from a copy under ~/.claude/plugins/cache/, so it
+# can't find a repo-relative .build/ binary — channel/run.sh looks here instead.
+# No signing needed: vmchannel never reads Apple's data (no FDA), it only talks
+# to the app's loopback MCP server.
+install-channel: ## Build vmchannel and install it to ~/.local/bin (for the channel plugin)
+	swift build -c release --product vmchannel
+	install -d "$(HOME)/.local/bin"
+	install -m 755 .build/release/vmchannel "$(HOME)/.local/bin/vmchannel"
 
 uninstall: ## Unload and remove the LaunchAgent (leaves the app and data)
 	launchd/uninstall.sh

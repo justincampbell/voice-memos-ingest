@@ -374,7 +374,7 @@ Put new logic in the toolbox, keep the provider thin.
 A Claude Code **channel** lets a session *subscribe* to new memos and receive
 each as an inbound message, instead of every agent running its own `Monitor` /
 cron / `wait_for_next` loop (the point of issue #1). A session opts in at launch:
-`claude --channels plugin:voice-memos@voice-memos-ingest`.
+`claude --dangerously-load-development-channels plugin:voice-memos@voice-memos-ingest`.
 
 `vmchannel` is a bridge: a **channel MCP server over stdio** on the Claude Code
 side, and an **MCP client** to the resident app's loopback server on the data
@@ -401,9 +401,27 @@ app running with `mcpEnabled`.
   `ChannelServer.handle` / `pumpSource` take an injectable `OutboundWriter` so
   they're testable without real stdin/stdout; `MemoSource` is a protocol so the
   pump can run against a canned source.
-- The plugin launches `vmchannel` via `channel/run.sh` (finds the built binary;
-  it's a `.build/` artifact, not committed — `swift build -c release --product
-  vmchannel` first). Installable as a local marketplace via the repo-root
+- **Plain `--channels` cannot load this plugin** (verified 2026-10-24, CLI
+  2.1.310: *"not on the approved channels allowlist"*). During the research
+  preview `--channels` only accepts Anthropic's allowlist; there is no user
+  setting to extend it (`allowedChannelPlugins` is managed-settings-only, for
+  Team/Enterprise). The development flag above bypasses the allowlist, but only
+  in an **interactive** session — it's ignored under `-p` / the Agent SDK, so a
+  headless agent can't subscribe this way.
+- **Version negotiation is bounded, not an echo.** `initialize` answers with the
+  client's requested `protocolVersion` only if it's in the swift-sdk's
+  `Version.supported`, else `Version.latest`. Claude Code refuses to register a
+  channel that negotiates `2026-07-28`, so echoing an unknown request back would
+  silently un-register the channel.
+- **The installed plugin runs from a cache copy, not the repo.**
+  `claude plugin install` copies `channel/` to
+  `~/.claude/plugins/cache/voice-memos-ingest/voice-memos/<version>/`, so
+  `run.sh`'s repo-relative `.build/` lookup can't work for an installed plugin.
+  That's why the binary is installed to `~/.local/bin/vmchannel` (`make
+  install-channel`, no signing needed since it never touches Apple's data). The
+  cache is keyed on `plugin.json`'s `version`: bump it and `claude plugin update`
+  after changing anything under `channel/`, or the old copy keeps running.
+  Installable as a local marketplace via the repo-root
   `.claude-plugin/marketplace.json`.
 
 **TCC gotchas worth remembering:**

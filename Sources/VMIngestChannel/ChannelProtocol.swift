@@ -4,7 +4,9 @@
 // experimental `claude/channel` capability in its initialize result, (b) pushes
 // inbound messages to the session as `notifications/claude/channel`, and (c)
 // exposes a `reply` tool for the session to talk back. A session subscribes by
-// launching with `claude --channels plugin:<name>@<marketplace>`.
+// launching with `claude --dangerously-load-development-channels
+// plugin:<name>@<marketplace>` (plain `--channels` only accepts Anthropic's
+// allowlist during the research preview).
 //
 // We hand-roll the JSON-RPC rather than use the swift-sdk `Server`: the SDK's
 // `Server.Capabilities` is a fixed Codable with no `experimental` field, so it
@@ -28,10 +30,15 @@ public struct ChannelProtocol: Sendable {
     /// The channel's single conversation id. Voice memos are one linear feed.
     public let chatID: String
 
-    /// Protocol version echoed back when the client omits one. The initialize
-    /// handler prefers the client's requested version (channels negotiate by
-    /// agreement), falling back to this.
-    public static let fallbackProtocolVersion = "2025-06-18"
+    /// Standard MCP version negotiation: answer with the client's requested
+    /// version if we speak it, otherwise with our latest. Bounded to the
+    /// swift-sdk's `Version.supported` on purpose — blindly echoing whatever the
+    /// client asks for would claim revisions we don't implement, and Claude Code
+    /// refuses to register a channel that negotiates `2026-07-28`.
+    static func negotiatedVersion(requested: String?) -> String {
+        if let requested, Version.supported.contains(requested) { return requested }
+        return Version.latest
+    }
 
     public static let channelCapabilityKey = "claude/channel"
     public static let notificationMethod = "notifications/claude/channel"
@@ -119,7 +126,7 @@ public struct ChannelProtocol: Sendable {
 
     private func initializeResult(protocolVersion: String?) -> Value {
         .object([
-            "protocolVersion": .string(protocolVersion ?? Self.fallbackProtocolVersion),
+            "protocolVersion": .string(Self.negotiatedVersion(requested: protocolVersion)),
             "capabilities": .object([
                 "tools": .object([:]),
                 "experimental": .object([Self.channelCapabilityKey: .object([:])]),

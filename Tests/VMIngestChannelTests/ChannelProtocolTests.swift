@@ -42,7 +42,19 @@ final class ChannelProtocolTests: XCTestCase {
     func testInitializeFallsBackWhenNoVersionRequested() throws {
         let request: Value = .object(["jsonrpc": "2.0", "id": .int(2), "method": "initialize"])
         let result = try XCTUnwrap(proto.response(to: request)?.objectValue?["result"]?.objectValue)
-        XCTAssertEqual(result["protocolVersion"]?.stringValue, ChannelProtocol.fallbackProtocolVersion)
+        XCTAssertEqual(result["protocolVersion"]?.stringValue, Version.latest)
+    }
+
+    /// Claude Code drops a channel that negotiates a revision it can't use as a
+    /// channel (`2026-07-28`), so an unknown request must not be echoed back.
+    func testInitializeDoesNotEchoUnsupportedVersion() throws {
+        let request: Value = .object([
+            "jsonrpc": "2.0", "id": .int(3), "method": "initialize",
+            "params": .object(["protocolVersion": "2026-07-28"]),
+        ])
+        let result = try XCTUnwrap(proto.response(to: request)?.objectValue?["result"]?.objectValue)
+        XCTAssertEqual(result["protocolVersion"]?.stringValue, Version.latest)
+        XCTAssertNotEqual(result["protocolVersion"]?.stringValue, "2026-07-28")
     }
 
     // MARK: - lifecycle / lists
