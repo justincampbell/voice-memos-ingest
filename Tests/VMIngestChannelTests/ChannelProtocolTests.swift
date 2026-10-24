@@ -131,5 +131,10 @@ final class ChannelProtocolTests: XCTestCase {
         XCTAssertEqual(meta["title"]?.stringValue, "Idea")
         XCTAssertEqual(meta["transcript_source"]?.stringValue, "apple")
         XCTAssertNil(meta["source"])  // reserved for the channel envelope
+        XCTAssertEqual(meta["duration"]?.stringValue, "12.5")
+        // meta is Record<string, string> in the contract: every value a string.
+        for (key, value) in meta {
+            XCTAssertNotNil(value.stringValue, "meta.\(key) must be a string")
+        }
     }
 }

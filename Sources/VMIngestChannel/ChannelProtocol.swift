@@ -170,7 +170,10 @@ public struct ChannelProtocol: Sendable {
                     "user": .string(chatID),
                     "ts": .string(record.recordedAt),
                     "title": .string(record.title),
-                    "duration": .double(record.duration),
+                    // Strings only: the contract types meta as
+                    // Record<string, string>, so a number here risks the
+                    // attribute (or the whole event) being dropped.
+                    "duration": .string(String(record.duration)),
                     // `transcript_source`, not `source`: the channel envelope
                     // already carries a `source=` attribute (the plugin id), so
                     // a `source` meta key risks colliding with / mislabelling it.
