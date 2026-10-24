@@ -1,0 +1,14 @@
+{
+  "name": "voice-memos",
+  "description": "Voice Memos channel for Claude Code — pushes each newly transcribed Apple Voice Memo into the session as a message, so agents subscribe instead of polling.",
+  "version": "0.1.2",
+  "author": {
+    "name": "Justin Campbell"
+  },
+  "keywords": [
+    "voice-memos",
+    "voice",
+    "channel",
+    "mcp"
+  ]
+}

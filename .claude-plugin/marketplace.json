@@ -1,0 +1,15 @@
+{
+  "name": "voice-memos-ingest",
+  "description": "Local Claude Code plugins for voice-memos-ingest.",
+  "owner": {
+    "name": "Justin Campbell"
+  },
+  "plugins": [
+    {
+      "name": "voice-memos",
+      "description": "Pushes each newly transcribed Apple Voice Memo into the session as a channel message — subscribe to new memos instead of polling.",
+      "category": "productivity",
+      "source": "./channel"
+    }
+  ]
+}
