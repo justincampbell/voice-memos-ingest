@@ -15,9 +15,9 @@
 //
 // Outbound is gated on the initialize handshake: the MCP lifecycle forbids the
 // server from sending normal notifications before the client has initialized,
-// so the memo pump holds until `initialize` (or `notifications/initialized`) is
-// seen. Memos that arrive during the sub-second handshake buffer in the source
-// stream and flush the moment the gate opens.
+// so the memo pump holds until `notifications/initialized` is seen (not merely
+// the `initialize` request). The pump only subscribes to the source once the
+// gate opens, so nothing is lost: it starts "from now" at that point.
 
 import Foundation
 import MCP
@@ -50,21 +50,44 @@ public actor StdoutWriter: OutboundWriter {
 
 /// A one-shot latch: outbound notifications wait on it until the handshake
 /// opens it. Opening is idempotent and releases every waiter.
+///
+/// `wait()` is cancellation-aware, which is load-bearing: a client that hangs
+/// up before initializing cancels the pump while it is parked here, and a plain
+/// checked continuation would never resume — `run()`'s task group would then
+/// wait on it forever and the process would outlive its client. A cancelled
+/// waiter returns early; callers check `Task.isCancelled` to tell why.
 actor InitGate {
     private var isOpen = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [UUID: CheckedContinuation<Void, Never>] = [:]
 
     func open() {
         guard !isOpen else { return }
         isOpen = true
-        let pending = waiters
-        waiters = []
+        let pending = waiters.values
+        waiters = [:]
         for waiter in pending { waiter.resume() }
     }
 
     func wait() async {
         if isOpen { return }
-        await withCheckedContinuation { waiters.append($0) }
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                // Already cancelled before we parked ⇒ onCancel's release (below)
+                // may have run and found nothing, so don't park at all.
+                if isOpen || Task.isCancelled {
+                    continuation.resume()
+                } else {
+                    waiters[id] = continuation
+                }
+            }
+        } onCancel: {
+            Task { await self.release(id) }
+        }
+    }
+
+    private func release(_ id: UUID) {
+        waiters.removeValue(forKey: id)?.resume()
     }
 }
 
@@ -103,6 +126,7 @@ public struct ChannelServer: Sendable {
     /// the initialize handshake has opened the gate.
     func pumpSource() async {
         await gate.wait()
+        guard !Task.isCancelled else { return }  // client left before initializing
         for await record in source.records() {
             await writer.write(proto.channelNotification(for: record))
         }
@@ -131,9 +155,10 @@ public struct ChannelServer: Sendable {
         if let response = proto.response(to: message) {
             await writer.write(response)
         }
-        // Open the outbound gate once the client has initialized. Either signal
-        // suffices; opening is idempotent.
-        if method == "initialize" || method == "notifications/initialized" {
+        // Open the outbound gate only when the client says it's ready. The
+        // `initialize` request is not that signal — the client may not be
+        // listening for notifications until it sends `notifications/initialized`.
+        if method == "notifications/initialized" {
             await markInitialized()
         }
     }

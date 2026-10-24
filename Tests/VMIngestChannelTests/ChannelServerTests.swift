@@ -83,6 +83,46 @@ final class ChannelServerTests: XCTestCase {
         XCTAssertEqual(after.count, 1)
     }
 
+    /// The `initialize` *request* is not readiness: the client may not be
+    /// listening until it sends `notifications/initialized`, so a memo landing
+    /// between the two must still be held.
+    func testGateOpensOnInitializedNotificationNotInitializeRequest() async throws {
+        let writer = CapturingWriter()
+        let s = server(source: CannedSource(items: [record("A")]), writer: writer)
+        let pump = Task { await s.pumpSource() }
+
+        try await s.handle(line: line(.object(["jsonrpc": "2.0", "id": .int(1), "method": "initialize"])))
+        try await Task.sleep(for: .milliseconds(50))
+        let afterInitialize = await writer.all()
+        // Only the initialize response — no channel notification yet.
+        XCTAssertEqual(afterInitialize.count, 1)
+        XCTAssertNil(afterInitialize.first?.objectValue?["method"])
+
+        try await s.handle(line: line(.object(["jsonrpc": "2.0", "method": "notifications/initialized"])))
+        await pump.value
+        let afterInitialized = await writer.all()
+        XCTAssertEqual(afterInitialized.count, 2)
+        XCTAssertEqual(afterInitialized.last?.objectValue?["method"]?.stringValue, ChannelProtocol.notificationMethod)
+    }
+
+    /// A client that disconnects before initializing cancels the pump while it
+    /// is still parked on the gate. The pump must return — otherwise `run()`'s
+    /// task group never drains and the process outlives its client.
+    func testCancellingPumpBeforeInitializeReleasesIt() async {
+        let writer = CapturingWriter()
+        let s = server(source: CannedSource(items: [record("A")]), writer: writer)
+        let pump = Task { await s.pumpSource() }
+        try? await Task.sleep(for: .milliseconds(20))  // let it park on the gate
+
+        pump.cancel()
+        let returned = expectation(description: "pump returns after cancel")
+        Task { await pump.value; returned.fulfill() }
+        await fulfillment(of: [returned], timeout: 2)
+
+        let written = await writer.all()
+        XCTAssertTrue(written.isEmpty)  // cancelled, so nothing was sent
+    }
+
     // MARK: - inbound handling
 
     func testHandleInitializeWritesResponse() async throws {
